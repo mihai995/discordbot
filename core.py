@@ -1,35 +1,49 @@
-import asyncio
+from util import getGoogleMeme, getMemes, BOT_NAME, BOT_CHANNEL_ID, MAIN_CHANNEL_ID, CMD_MARKER, MEME_THRESHOLD
+import asyncio, ahocorasick, discord, random
 
 class DiscordBot():
-  BOT_CHANNEL_ID = '312604110547451904'
-  CMD_ = 'cmd_'
-  MEME = '/media/Storage/Memes/{}.png'
-
   def __init__(self, bot):
     self.bot = bot
     self.server = next(x for x in self.bot.servers)
-    self.logger = self.server.get_channel(DiscordBot.BOT_CHANNEL_ID)
+    self.main_channel = self.server.get_channel(MAIN_CHANNEL_ID)
+    self.logger = self.server.get_channel(BOT_CHANNEL_ID)
 
-  async def message(self, channel, query, msg):
-    await self.bot.send_message(channel, '<@{}> {}'.format(query.author.id, msg))
+  async def send_message(self, msg, arg = None):
+    if arg == None:
+      arg = self.main_channel
+    elif type(arg) == discord.Message:
+      arg = arg.channel
+    await self.bot.send_message(arg, msg)
 
   async def log(self, query, msg):
-    await self.bot.send_message(self.logger, '[{}] {}'.format(query.author.nick, msg))
+    nick = query.author.nick if query.author.nick else query.author.name
+    await self.send_message('[{}] {}'.format(nick, msg), self.logger)
 
   async def rename(self, name):
     await self.bot.http.change_my_nickname(self.server.id, name)
 
-  async def reply(self, query, msg):
-    await self.message(query.channel, query, msg)
+  async def reply(self, query, msg, AS = None):
+    if AS:  self.rename(AS)
+    await self.send_message(query.author.mention + ' ' + msg, query)
+    if AS:  self.rename(BOT_NAME)
 
-  async def satanicReply(self, query, msg):
-    await self.rename('Satan')
-    await self.reply(query, msg)
-    await self.rename('Demonic Servant')
+  async def attach(self, query, filename, extra_text = ''):
+    if extra_text:
+      extra_text = query.author.mention() + ' ' + extra_text
+    if filename[0] != '/':
+      filename = MEME_FOLDER + filename
+    await self.bot.send_file(query.channel, filename, content = extra_text)
 
-  async def attachMeme(self, query, name, msg):
-    msg = '<@{}> {}'.format(query.author.id, msg)
-    await self.bot.send_file(query.channel, DiscordBot.MEME.format(name), content = msg)
+  async def attach_meme(self, query):
+    options = getMemes(query.content)
+    if len(options) > 0:
+      await self.attach(query, random.choice(options)[1])
+    elif random.random() < MEME_THRESHOLD:
+      type,meme = getGoogleMeme(query.content)
+      if type != None:
+        tmp = tempfile.NamedTemporaryFile(suffix = type)
+        tmp.write(meme)
+        await self.attach(query, tmp.name)
 
   def handlers(self):
-    return {x:getattr(self, x) for x in dir(self) if x.startswith(DiscordBot.CMD_)}
+    return {x:getattr(self, x) for x in dir(self) if x.startswith(CMD_MARKER)}
